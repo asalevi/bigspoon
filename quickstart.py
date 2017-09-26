@@ -53,48 +53,59 @@ def get_credentials():
         print('Storing credentials to ' + credential_path)
     return credentials
 
+def GetMessageContents(mime_msg):
+    messageMainType = mime_msg.get_content_maintype()
+    if messageMainType == 'multipart':
+        for part in mime_msg.get_payload():
+            return GetMessageContents(part)
+    elif messageMainType == 'text':
+        return mime_msg.get_payload()
+
+
 def GetMessageBody(service, user_id, msg_id):
     try:
             message = service.users().messages().get(userId=user_id, id=msg_id, format='raw').execute()
             msg_str = base64.urlsafe_b64decode(message['raw'].encode('ASCII'))
             mime_msg = email.message_from_string(msg_str)
-            messageMainType = mime_msg.get_content_maintype()
-            if messageMainType == 'multipart':
-                    for part in mime_msg.get_payload():
-                            if part.get_content_maintype() == 'text':
-                                    return part.get_payload()
-                    return ""
-            elif messageMainType == 'text':
-                    return mime_msg.get_payload()
+            return GetMessageContents(mime_msg)
+            # messageMainType = mime_msg.get_content_maintype()
+
+            # if messageMainType == 'multipart':
+            #         for part in mime_msg.get_payload():
+            #                 if part.get_content_maintype() == 'text':
+            #                         return part.get_payload()
+            #         return ""
+            # elif messageMainType == 'text':
+            #         return mime_msg.get_payload()
     except Exception as error:
             print('An error occurred: %s' % error)
 
 def parseOrderEmail(msg):
     msg = msg.replace('\r','')
+    # msg = msg.replace('\n\n', '')
     order_number = re.findall(r"Order #: ([0-9]+)", msg)[0]
     order_date = re.findall(r"Order placed: ([0-9a-zA-Z, ]+)", msg)[0]
     total_cost = re.findall(r"Total cost: \$([0-9.]+)", msg)[0]
-    header = re.search(r"[^\n]*Item	Qty	Total[^\n]*", msg)
-    footer = re.search(r"[^\n]*Subtotal	\$[0-9.][^\n]*", msg)
+    header = re.search(r"\*+\nORDER DETAILS\n\*+", msg)
+    footer = re.search(r"----------------------------------", msg)
     order_table = msg[header.end()+1:footer.start()-1]
     order_lines_raw = order_table.split('\n')
     order_lines = []
     i = 0
     order_line = {"item_notes":""}
     for line in order_lines_raw:
-        if i==0:
-            order_line["item_description"] = line
-            i += 1
-        elif ("Price:" in line):
-            a = line.split('\t')
-            order_line["line_total"] = a[2].replace('$','')
+        if ("Item:" in line):
+            item_description = re.findall(r"Item: ([^\n]+)", line)[0]
+            order_line["item_description"] = item_description
+        elif ("Quantity:" in line):
+            a = line.split('Quantity:')
+            quantity = re.findall(r"Quantity: ([0-9.]+)", line)[0]
+            order_line["item_notes"] += a[0].replace('\t', '')
             order_line["quantity"] = a[1]
+        elif ("Item Total:" in line):
+            order_line["line_total"] = re.findall(r"Item Total: \$([0-9.]+)", line)[0]
             order_lines.append(order_line)
             order_line = {"item_notes":""}
-            i = 0
-        else:
-            order_line["item_notes"] += line
-            i += 1
     order = {
         "order_number":order_number,
         "order_date":order_date,
@@ -115,7 +126,7 @@ def main():
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('gmail', 'v1', http=http)
 
-    results = service.users().messages().list(userId='me', q='"NICE! YOU JUST GOT AN ORDER"').execute()
+    results = service.users().messages().list(userId='me', q='from:no-reply-commerce@wix.com').execute()
     messages = results.get('messages', [])
 
     if not messages:

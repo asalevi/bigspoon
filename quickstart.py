@@ -86,6 +86,7 @@ def parseOrderEmail(msg):
     order_number = re.findall(r"Order #: ([0-9]+)", msg)[0]
     order_date = re.findall(r"Order placed: ([0-9a-zA-Z, ]+)", msg)[0]
     total_cost = re.findall(r"Total cost: \$([0-9.]+)", msg)[0]
+    order_tax = re.findall(r"Shipping:[ \t]+\$[0-9.]+[ \t]+\$([0-9.]+) -+", msg)[0]
     header = re.search(r"\*+\nORDER DETAILS\n\*+", msg)
     footer = re.search(r"----------------------------------", msg)
     order_table = msg[header.end()+1:footer.start()-1]
@@ -109,6 +110,7 @@ def parseOrderEmail(msg):
     order = {
         "order_number":order_number,
         "order_date":order_date,
+        "order_tax":order_tax,
         "order_total":total_cost,
         "order_lines":order_lines
     }
@@ -133,12 +135,13 @@ def main():
         print('No messages found.')
     else:
         print('messages:')
-        row = '%(order_number)s\t%(order_date)s\t%(order_total)s\t%(item_description)s\t%(quantity)s\t%(line_total)s\t%(item_notes)s\n'
+        row = '%(order_number)s\t%(order_date)s\t%(order_tax)s\t%(order_total)s\t%(item_description)s\t%(quantity)s\t%(line_total)s\t%(item_notes)s\n'
         processed_lines = []
         with open(csv_file_dest, 'w') as outputFile:
             outputFile.write(row % {
                 'order_number': "order_number",
                 'order_date': "order_date",
+                'order_tax': "order_tax",
                 'order_total': "order_total",
                 'item_description': "item_description",
                 'quantity': "quantity",
@@ -150,13 +153,14 @@ def main():
                 order = parseOrderEmail(msgBody)
                 print(order)
                 for line in order["order_lines"]:
-                    line_key = order["order_number"]+"_"+line["item_description"]
+                    line_key = order["order_number"]+"_"+line["item_description"]+"_"+line["item_notes"]
                     if line_key in processed_lines:
                         print(line_key +" already processed")
                     else:
                         outputFile.write(row % {
                             'order_number': order["order_number"],
                             'order_date': order["order_date"],
+                            'order_tax': order["order_tax"],
                             'order_total': order["order_total"],
                             'item_description': line["item_description"],
                             'quantity': line["quantity"],

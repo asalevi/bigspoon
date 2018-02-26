@@ -82,6 +82,7 @@ def GetMessageBody(service, user_id, msg_id):
 
 def parseOrderEmail(msg):
     msg = msg.replace('\r','')
+    msg = msg.replace('=\n','')
     # msg = msg.replace('\n\n', '')
     order_number = re.findall(r"Order #: ([0-9]+)", msg)[0]
     order_date = re.findall(r"Order placed: ([0-9a-zA-Z, ]+)", msg)[0]
@@ -128,7 +129,7 @@ def main():
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('gmail', 'v1', http=http)
 
-    results = service.users().messages().list(userId='me', q='from:no-reply-commerce@wix.com').execute()
+    results = service.users().messages().list(userId='me', q='from:no-reply-commerce@wix.com OR from:no-reply@mystore.wix.com').execute()
     messages = results.get('messages', [])
 
     if not messages:
